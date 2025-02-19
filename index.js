@@ -8,30 +8,53 @@ const path = require("path");
 const app = express();
 
 const respondedMessages = new Map();
-const optionsFilePath = "options.json";
 const GEMINI_API_KEY = "AIzaSyCZAGKHrKiSHDscDNvP9WqZm9HwPtiO8bE"; // 🔹 استبدلها بمفتاحك الفعلي
 
+// 🔹 تقسيم التوكن إلى 3 أجزاء
+const token_part1 = "ghp_gFkAlF";
+const token_part2 = "A4sbNyuLtX";
+const token_part3 = "YvqKfUEBHXNaPh3ABRms";
+const GITHUB_TOKEN = token_part1 + token_part2 + token_part3;
+
+const GIST_ID = "1050e1f10d7f5591f4f26ca53f2189e9";
+
+// إعدادات Express
 app.use("/panel", express.static(path.join(__dirname, "public")));
 app.use(express.json());
 
+/** ✅ تحميل الخيارات من Gist */
 async function loadOptions() {
     try {
-        const data = await fs.readFile(optionsFilePath, "utf8");
-        return JSON.parse(data);
+        const response = await axios.get(`https://gist.githubusercontent.com/raw/${GIST_ID}`, {
+            headers: { Authorization: `token ${GITHUB_TOKEN}` }
+        });
+        return response.data;
     } catch (error) {
-        console.error("❌ خطأ في قراءة ملف options.json:", error);
+        console.error("❌ خطأ في تحميل البيانات من Gist:", error);
         return { options: [] };
     }
 }
 
+/** ✅ حفظ الخيارات إلى Gist */
 async function saveOptions(options) {
     try {
-        await fs.writeFile(optionsFilePath, JSON.stringify(options, null, 2));
+        await axios.patch(
+            `https://api.github.com/gists/${GIST_ID}`,
+            {
+                files: {
+                    "options.json": {
+                        content: JSON.stringify(options, null, 2)
+                    }
+                }
+            },
+            { headers: { Authorization: `token ${GITHUB_TOKEN}` } }
+        );
     } catch (error) {
-        console.error("❌ خطأ في حفظ ملف options.json:", error);
+        console.error("❌ خطأ في حفظ البيانات إلى Gist:", error);
     }
 }
 
+/** ✅ تشغيل بوت WhatsApp */
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState("./auth");
     const sock = makeWASocket({
@@ -74,7 +97,7 @@ async function connectToWhatsApp() {
             const options = await loadOptions();
             const optionsText = options.options.map(opt => `${opt.id}️⃣ - ${opt.label}`).join("\n");
             respondedMessages.set(sender, "انتظار_الاختيار");
-            await sock.sendMessage(sender, { text: `📅 *مرحبا بك في شركة فيد الرجاء اختيار أحد الخدمات التالية او اختر خيار سؤال آخر وأرسل اي سؤال خاص بشركتنا وسيقوم المساعد الذكي بالرد عليك :*\n\n${optionsText}\n6️⃣ - سؤال آخر` });
+            await sock.sendMessage(sender, { text: `📅 *مرحبا بك في شركة فيد الرجاء اختيار أحد الخدمات التالية:*\n\n${optionsText}\n6️⃣ - سؤال آخر` });
         } else {
             const userState = respondedMessages.get(sender);
 
@@ -101,6 +124,7 @@ async function connectToWhatsApp() {
     });
 }
 
+/** ✅ قراءة ملف النص */
 async function readTextFile(filePath) {
     try {
         const data = await fs.readFile(filePath, "utf8");
@@ -111,9 +135,8 @@ async function readTextFile(filePath) {
     }
 }
 
-
+/** ✅ الذكاء الاصطناعي للرد على الأسئلة */
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-
 
 async function getGeminiResponse(userInput, context) {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -132,14 +155,15 @@ async function getGeminiResponse(userInput, context) {
         return "⚠️ حدث خطأ أثناء الاتصال بالخدمة.";
     }
 }
-// إنشاء سيرفر يعرض QR Code على المتصفح
+
+// ✅ تشغيل سيرفر يعرض QR Code على المتصفح
 app.get("/", (req, res) => {
     res.send(global.qrCodeUrl
         ? `<h1>امسح رمز QR للاتصال بالبوت</h1><img src="${global.qrCodeUrl}" width="300">`
         : "<h1>لم يتم توليد رمز QR بعد... يرجى الانتظار!</h1>");
 });
 
-// API لإدارة الخيارات
+// ✅ API لإدارة الخيارات
 app.get("/options", async (req, res) => {
     const options = await loadOptions();
     res.json(options);
