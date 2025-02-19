@@ -1,0 +1,29 @@
+{
+  "name": "nodejs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@hapi/boom": "^10.0.1",
+    "@types/node": "^18.0.6",
+    "@whiskeysockets/baileys": "^6.7.12",
+    "axios": "^1.7.9",
+    "body-parser": "^1.20.3",
+    "cobalt": "^0.1.0",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "mongoose": "^8.9.6",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "venom-bot": "^5.3.0",
+    "whatsapp-web.js": "^1.26.0",
+    "wwebjs-mongo": "^1.1.0"
+  }
+}
