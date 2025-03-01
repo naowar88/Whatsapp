@@ -140,7 +140,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 async function getGeminiResponse(userInput, context) {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-002" });
 
     const prompt = `من خلال المعلومات التالية، أعطني فقط الإجابة على السؤال بدون أي مقدمات:\n\nالنص:\n${context}\n\nالسؤال:\n${userInput}\n\nالإجابة:`;
 
