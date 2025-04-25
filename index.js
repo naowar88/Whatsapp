@@ -22,7 +22,7 @@ async function loadOptions() {
         const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
             headers: { Authorization: `token ${GITHUB_TOKEN}` }
         });
-        return JSON.parse(response.data.files["options2.json"].content);
+        return JSON.parse(response.data.files["options22.json"].content);
     } catch (error) {
         console.error("❌ فشل تحميل الخيارات:", error);
         return { options: [] };
@@ -33,7 +33,7 @@ async function loadOptions() {
 async function saveOptions(options) {
     try {
         await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
-            files: { "options2.json": { content: JSON.stringify(options, null, 2) } }
+            files: { "options22.json": { content: JSON.stringify(options, null, 2) } }
         }, { headers: { Authorization: `token ${GITHUB_TOKEN}` } });
     } catch (error) {
         console.error("❌ فشل حفظ الخيارات:", error);
@@ -97,7 +97,7 @@ async function handleNewUser(sock, sender) {
         .join("\n");
 
     await sock.sendMessage(sender, { 
-        text: `📅 *أرحب واهلا وسهلا بك في موقع منيو*\n\nاختر خدمة:\n${menuText}`
+        text: `📅 *مرحبا بك في شركة فيد*\n\nاختر خدمة:\n${menuText}`
     });
     respondedMessages.set(sender, "MAIN_MENU");
 }
@@ -174,7 +174,20 @@ app.post("/options", async (req, res) => {
     try {
         const newOption = req.body;
         const options = await loadOptions();
-        options.options.push(newOption);
+        
+        // تحديد موقع إدراج الخيار الجديد
+        const insertIndex = options.options.findIndex(opt => 
+            parseInt(opt.id) > parseInt(newOption.id)
+        );
+        
+        if (insertIndex === -1) {
+            // إذا كان الرقم أكبر من جميع الخيارات الموجودة، أضفه في النهاية
+            options.options.push(newOption);
+        } else {
+            // إدراج الخيار في موقعه المناسب
+            options.options.splice(insertIndex, 0, newOption);
+        }
+        
         await saveOptions(options);
         res.json({ success: true });
     } catch (error) {
