@@ -7,158 +7,153 @@ const axios = require("axios");
 const path = require("path");
 const app = express();
 
+// 🔹 هياكل البيانات
+global.qrCodeUrl = null;
 const respondedMessages = new Map();
-const optionsFilePath = "options.json";
-
-// 🔹 تقسيم التوكن لحمايته
+const GIST_ID = "1050e1f10d7f5591f4f26ca53f2189e9";
 const token_part1 = "ghp_gFkAlF";
 const token_part2 = "A4sbNyuLtX";
 const token_part3 = "YvqKfUEBHXNaPh3ABRms";
 const GITHUB_TOKEN = token_part1 + token_part2 + token_part3;
-const GIST_ID = "1050e1f10d7f5591f4f26ca53f2189e9";
 
-// 🔹 مفتاح Gemini API
-const GEMINI_API_KEY = "AIzaSyCZAGKHrKiSHDscDNvP9WqZm9HwPtiO8bE";
-
-// 🔹 تحميل الخيارات من Gist
+// 🔹 دالة لتحميل الخيارات
 async function loadOptions() {
     try {
         const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
             headers: { Authorization: `token ${GITHUB_TOKEN}` }
         });
-        const options = JSON.parse(response.data.files["options.json"].content);
-        return options;
+        return JSON.parse(response.data.files["options2.json"].content);
     } catch (error) {
-        console.error("❌ خطأ في تحميل الخيارات من Gist:", error);
+        console.error("❌ فشل تحميل الخيارات:", error);
         return { options: [] };
     }
 }
 
-// 🔹 حفظ الخيارات في Gist
+// 🔹 دالة لحفظ الخيارات
 async function saveOptions(options) {
     try {
         await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
-            files: {
-                "options.json": { content: JSON.stringify(options, null, 2) }
-            }
-        }, {
-            headers: { Authorization: `token ${GITHUB_TOKEN}` }
-        });
+            files: { "options2.json": { content: JSON.stringify(options, null, 2) } }
+        }, { headers: { Authorization: `token ${GITHUB_TOKEN}` } });
     } catch (error) {
-        console.error("❌ خطأ في حفظ الخيارات في Gist:", error);
+        console.error("❌ فشل حفظ الخيارات:", error);
     }
 }
 
-// 🔹 إنشاء اتصال مع واتساب
+// 🔹 دالة الاتصال بواتساب
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState("./auth");
-    const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false,
-    });
+    const sock = makeWASocket({ auth: state, printQRInTerminal: false });
 
     sock.ev.on("creds.update", saveCreds);
-
-    sock.ev.on("connection.update", async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            console.log("✅ تم توليد رمز QR! امسحه للاتصال.");
-            qrcode.toDataURL(qr, (err, url) => {
-                if (err) console.error("❌ خطأ في إنشاء QR:", err);
-                global.qrCodeUrl = url;
-            });
-        }
-
-        if (connection === "close") {
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401;
-            console.log("🚨 تم فصل الاتصال، جارٍ إعادة الاتصال...", shouldReconnect);
-            if (shouldReconnect) connectToWhatsApp();
-        } else if (connection === "open") {
-            console.log("✅ تم الاتصال بنجاح!");
-        }
-    });
+    sock.ev.on("connection.update", handleConnectionUpdate);
 
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe) return;
 
         const sender = msg.key.remoteJid;
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+        const text = (msg.message.conversation || "").trim();
 
-        console.log(`📩 رسالة جديدة من ${sender}: ${text}`);
-
-        if (!respondedMessages.has(sender)) {
-            const options = await loadOptions();
-            if (!options || !options.options) {
-                console.error("❌ لم يتم تحميل الخيارات بشكل صحيح.");
-                return;
+        try {
+            if (!respondedMessages.has(sender)) {
+                await handleNewUser(sock, sender);
+            } else {
+                await handleExistingUser(sock, sender, text);
             }
-
-            const optionsText = options.options.map(opt => `${opt.id}️⃣ - ${opt.label}`).join("\n");
-            respondedMessages.set(sender, "انتظار_الاختيار");
-            await sock.sendMessage(sender, { text: `📅 *مرحبا بك في شركة فيد*\n\nاختر خدمة:\n${optionsText}\n6️⃣ - سؤال آخر` });
-        } else {
-            const userState = respondedMessages.get(sender);
-
-            if (userState === "انتظار_الاختيار") {
-                const options = await loadOptions();
-                const selectedOption = options.options.find(opt => opt.id === text.trim());
-
-                if (selectedOption) {
-                    await sock.sendMessage(sender, { text: selectedOption.response });
-                    setTimeout(() => respondedMessages.delete(sender), 300000);
-                } else if (text.trim() === "6") {
-                    await sock.sendMessage(sender, { text: "✍️ *الرجاء كتابة سؤالك:*" });
-                    respondedMessages.set(sender, "انتظار_السؤال");
-                } else {
-                    await sock.sendMessage(sender, { text: "⚠️ خيار غير صحيح، الرجاء اختيار رقم من القائمة." });
-                }
-            } else if (userState === "انتظار_السؤال") {
-                const textContent = await readTextFile("file.txt");
-                const response = await getGeminiResponse(text, textContent);
-                await sock.sendMessage(sender, { text: response });
-                setTimeout(() => respondedMessages.delete(sender), 300000);
-            }
+        } catch (error) {
+            console.error("❌ خطأ في معالجة الرسالة:", error);
+            await sock.sendMessage(sender, { text: "⚠️ حدث خطأ غير متوقع!" });
         }
     });
 }
 
-// 🔹 قراءة ملف نصي
-async function readTextFile(filePath) {
-    try {
-        const data = await fs.readFile(filePath, "utf8");
-        return data;
-    } catch (error) {
-        console.error("❌ خطأ في قراءة الملف:", error);
-        return "";
+// 🔹 معالجة حالة الاتصال
+function handleConnectionUpdate(update) {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+        console.log("✅ تم توليد رمز QR! امسحه للاتصال.");
+        qrcode.toDataURL(qr, (err, url) => {
+            if (err) console.error("❌ خطأ في إنشاء QR:", err);
+            global.qrCodeUrl = url;
+        });
+    }
+
+    if (connection === "close") {
+        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401;
+        console.log("🚨 تم فصل الاتصال، جارٍ إعادة الاتصال...", shouldReconnect);
+        if (shouldReconnect) setTimeout(connectToWhatsApp, 3000);
+    } else if (connection === "open") {
+        console.log("✅ تم الاتصال بنجاح!");
     }
 }
 
-// 🔹 الاتصال بـ Gemini للحصول على الردود الذكية
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+// 🔹 معالجة المستخدم الجديد
+async function handleNewUser(sock, sender) {
+    const options = await loadOptions();
+    const menuText = options.options
+        .map(opt => `${opt.id}️⃣ - ${opt.label}`)
+        .join("\n");
 
-async function getGeminiResponse(userInput, context) {
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    await sock.sendMessage(sender, { 
+        text: `📅 *مرحبا بك عزيزي*\n\nاختر خدمة:\n${menuText}`
+    });
+    respondedMessages.set(sender, "MAIN_MENU");
+}
 
-    const prompt = `من خلال المعلومات التالية، أعطني فقط الإجابة على السؤال بدون أي مقدمات:\n\nالنص:\n${context}\n\nالسؤال:\n${userInput}\n\nالإجابة:`;
+// 🔹 معالجة المستخدم الحالي
+async function handleExistingUser(sock, sender, text) {
+    const userState = respondedMessages.get(sender);
+    const options = await loadOptions();
 
-    try {
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
-
-        console.log("📩 استجابة Gemini AI:", response);
-        return response.trim() || "⚠️ لم أفهم سؤالك، يرجى إعادة الصياغة.";
-    } catch (error) {
-        console.error("❌ خطأ أثناء الاتصال بـ Gemini AI:", error);
-        return "⚠️ حدث خطأ أثناء الاتصال بالخدمة.";
+    if (userState === "MAIN_MENU") {
+        const selectedOption = options.options.find(opt => opt.id === text);
+        
+        if (selectedOption) {
+            if (selectedOption.subOptions?.length > 0) {
+                await showSubMenu(sock, sender, selectedOption);
+            } else {
+                await sock.sendMessage(sender, { text: selectedOption.response });
+                respondedMessages.delete(sender);
+            }
+        } else {
+            await sock.sendMessage(sender, { text: "⚠️ خيار غير صحيح!" });
+        }
+    } else if (userState.startsWith("SUB_MENU_")) {
+        const mainOptionId = userState.split("_")[2];
+        const mainOption = options.options.find(opt => opt.id === mainOptionId);
+        
+        if (mainOption?.subOptions) {
+            const selectedSub = mainOption.subOptions.find(sub => sub.id === text);
+            
+            if (selectedSub) {
+                await sock.sendMessage(sender, { text: selectedSub.response });
+                respondedMessages.delete(sender);
+            } else {
+                await sock.sendMessage(sender, { text: "⚠️ خيار فرعي غير صحيح!" });
+            }
+        } else {
+            await sock.sendMessage(sender, { text: "⚠️ الخيار الرئيسي غير موجود!" });
+        }
     }
 }
 
-// 🔹 إنشاء سيرفر ويب لعرض QR Code
-app.use("/panel", express.static(path.join(__dirname, "public")));
+// 🔹 عرض القائمة الفرعية
+async function showSubMenu(sock, sender, mainOption) {
+    const subMenuText = mainOption.subOptions
+        .map(sub => `${sub.id}️⃣ - ${sub.label}`)
+        .join("\n");
+
+    await sock.sendMessage(sender, {
+        text: `📌 *${mainOption.label}*\n\nاختر الخيار الفرعي:\n${subMenuText}`
+    });
+    respondedMessages.set(sender, `SUB_MENU_${mainOption.id}`);
+}
+
+// 🔹 إعدادات السيرفر
 app.use(express.json());
+app.use("/panel", express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
     res.send(global.qrCodeUrl
@@ -166,28 +161,38 @@ app.get("/", (req, res) => {
         : "<h1>لم يتم توليد رمز QR بعد... يرجى الانتظار!</h1>");
 });
 
-// 🔹 API لإدارة الخيارات
 app.get("/options", async (req, res) => {
-    const options = await loadOptions();
-    res.json(options);
+    try {
+        const options = await loadOptions();
+        res.json(options);
+    } catch (error) {
+        res.status(500).json({ error: "فشل تحميل الخيارات" });
+    }
 });
 
 app.post("/options", async (req, res) => {
-    const newOption = req.body;
-    const options = await loadOptions();
-    options.options.push(newOption);
-    await saveOptions(options);
-    res.json({ success: true });
+    try {
+        const newOption = req.body;
+        const options = await loadOptions();
+        options.options.push(newOption);
+        await saveOptions(options);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: "فشل إضافة الخيار" });
+    }
 });
 
 app.delete("/options/:id", async (req, res) => {
-    const id = req.params.id;
-    const options = await loadOptions();
-    options.options = options.options.filter(opt => opt.id !== id);
-    await saveOptions(options);
-    res.json({ success: true });
+    try {
+        const id = req.params.id;
+        const options = await loadOptions();
+        options.options = options.options.filter(opt => opt.id !== id);
+        await saveOptions(options);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: "فشل حذف الخيار" });
+    }
 });
 
-app.listen(3000, () => console.log("🌍 افتح الرابط: http://localhost:3000"));
-
+app.listen(3000, () => console.log("🚀 السيرفر يعمل على http://localhost:3000"));
 connectToWhatsApp();
