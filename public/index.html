@@ -77,7 +77,7 @@
         <div id="options-list"></div>
         <div class="add-option">
             <h2>إضافة خيار جديد</h2>
-            <input type="text" id="option-id" placeholder="رقم الخيار (مثال: 1)">
+            <input type="number" id="option-id" placeholder="رقم الخيار (مثال: 1)" min="1" onkeypress="return event.charCode >= 48 && event.charCode <= 57">
             <input type="text" id="option-label" placeholder="عنوان الخيار (مثال: خدمات الإعلانات)">
             <textarea id="option-response" placeholder="الرد على الخيار"></textarea>
             <div id="sub-options-container"></div>
