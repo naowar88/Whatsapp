@@ -97,7 +97,7 @@ async function handleNewUser(sock, sender) {
         .join("\n");
 
     await sock.sendMessage(sender, { 
-        text: `📅 *مرحبا بك في شركة فيد*\n\nاختر خدمة:\n${menuText}`
+        text: `📅 *أرحب واهلا وسهلا بك في موقع منيو*\n\nاختر خدمة:\n${menuText}`
     });
     respondedMessages.set(sender, "MAIN_MENU");
 }
