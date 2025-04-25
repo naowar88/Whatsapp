@@ -73,7 +73,22 @@ async function deleteSubOption(mainOptionId, subOptionId) {
 
 // دالة لإضافة خيار رئيسي
 async function addOption() {
-    const id = document.getElementById('option-id').value;
+    // تنظيف وفحص رقم الخيار
+    let id = document.getElementById('option-id').value.trim().replace(/[^0-9]/g, '');
+    document.getElementById('option-id').value = id; // تحديث قيمة الحقل بعد التنظيف
+    
+    if (!id) {
+        alert('الرجاء إدخال رقم صحيح للخيار');
+        return;
+    }
+
+    // فحص إذا كان الرقم موجود مسبقاً
+    const currentOptions = await fetchOptions();
+    if (currentOptions.some(opt => opt.id === id)) {
+        alert('هذا الرقم موجود مسبقاً، الرجاء اختيار رقم آخر');
+        return;
+    }
+
     const label = document.getElementById('option-label').value;
     const response = document.getElementById('option-response').value;
 
