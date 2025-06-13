@@ -22,7 +22,7 @@ async function loadOptions() {
         const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`, {
             headers: { Authorization: `token ${GITHUB_TOKEN}` }
         });
-        return JSON.parse(response.data.files["options2.json"].content);
+        return JSON.parse(response.data.files["options602.json"].content);
     } catch (error) {
         console.error("❌ فشل تحميل الخيارات:", error);
         return { options: [] };
@@ -33,7 +33,7 @@ async function loadOptions() {
 async function saveOptions(options) {
     try {
         await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
-            files: { "options2.json": { content: JSON.stringify(options, null, 2) } }
+            files: { "options602.json": { content: JSON.stringify(options, null, 2) } }
         }, { headers: { Authorization: `token ${GITHUB_TOKEN}` } });
     } catch (error) {
         console.error("❌ فشل حفظ الخيارات:", error);
